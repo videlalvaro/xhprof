@@ -221,6 +221,9 @@ typedef struct hp_global_t {
   char  **ignored_function_names;
   uint8   ignored_function_filter[XHPROF_IGNORED_FUNCTION_FILTER_SIZE];
 
+  /* Indicates if xhprof should ignore the functions or profile them */
+  int              ignores;
+
 } hp_global_t;
 
 
@@ -359,11 +362,14 @@ ZEND_GET_MODULE(xhprof)
 PHP_FUNCTION(xhprof_enable) {
   long  xhprof_flags = 0;                                    /* XHProf flags */
   zval *optional_array = NULL;         /* optional array arg: for future use */
+  zend_bool ignores = 1;
 
   if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC,
-                            "|lz", &xhprof_flags, &optional_array) == FAILURE) {
+                            "|lzb", &xhprof_flags, &optional_array, &ignores) == FAILURE) {
     return;
   }
+  
+  hp_globals.ignores = (int) ignores;
 
   hp_get_ignored_functions_from_arg(optional_array);
 
@@ -394,6 +400,9 @@ PHP_FUNCTION(xhprof_disable) {
  */
 PHP_FUNCTION(xhprof_sample_enable) {
   long  xhprof_flags = 0;                                    /* XHProf flags */
+
+  hp_globals.ignores = 1;
+  
   hp_get_ignored_functions_from_arg(NULL);
   hp_begin(XHPROF_MODE_SAMPLED, xhprof_flags TSRMLS_CC);
 }
@@ -800,9 +809,15 @@ int  hp_ignore_entry_work(uint8 hash_code, char *curr_func) {
 }
 
 inline int  hp_ignore_entry(uint8 hash_code, char *curr_func) {
+  
+  int res;
+  
   /* First check if ignoring functions is enabled */
-  return hp_globals.ignored_function_names != NULL && 
+  res = hp_globals.ignored_function_names != NULL && 
          hp_ignore_entry_work(hash_code, curr_func);
+  
+  return hp_globals.ignores ? res : !res;
+  
 }
 
 /**
